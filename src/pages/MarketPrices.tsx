@@ -3,77 +3,48 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import {
   TrendingUp,
   TrendingDown,
   Search,
   ArrowUpRight,
   ArrowDownRight,
+  RefreshCw,
 } from 'lucide-react'
-
-interface CropPrice {
-  crop: string
-  currentPrice: number
-  previousPrice: number
-  unit: string
-  market: string
-  change: number
-  trend: 'up' | 'down' | 'stable'
-}
-
-const cropPrices: CropPrice[] = [
-  { crop: 'Maize (White)', currentPrice: 285, previousPrice: 260, unit: 'USD/ton', market: 'Harare', change: 9.6, trend: 'up' },
-  { crop: 'Maize (Yellow)', currentPrice: 310, previousPrice: 295, unit: 'USD/ton', market: 'Harare', change: 5.1, trend: 'up' },
-  { crop: 'Wheat', currentPrice: 420, previousPrice: 440, unit: 'USD/ton', market: 'Bulawayo', change: -4.5, trend: 'down' },
-  { crop: 'Soybeans', currentPrice: 520, previousPrice: 510, unit: 'USD/ton', market: 'Harare', change: 2.0, trend: 'up' },
-  { crop: 'Cotton', currentPrice: 180, previousPrice: 175, unit: 'USD/ton', market: 'Gweru', change: 2.9, trend: 'up' },
-  { crop: 'Tobacco (Virginia)', currentPrice: 3200, previousPrice: 3100, unit: 'USD/ton', market: 'Harare', change: 3.2, trend: 'up' },
-  { crop: 'Sugar Beans', currentPrice: 680, previousPrice: 700, unit: 'USD/ton', market: 'Harare', change: -2.9, trend: 'down' },
-  { crop: 'Groundnuts', currentPrice: 850, previousPrice: 820, unit: 'USD/ton', market: 'Mutare', change: 3.7, trend: 'up' },
-  { crop: 'Sorghum', currentPrice: 220, previousPrice: 215, unit: 'USD/ton', market: 'Masvingo', change: 2.3, trend: 'up' },
-  { crop: 'Millet', currentPrice: 200, previousPrice: 210, unit: 'USD/ton', market: 'Masvingo', change: -4.8, trend: 'down' },
-]
-
-const marketNews = [
-  {
-    id: 1,
-    title: 'Maize prices surge on strong demand',
-    summary: 'White maize prices have increased by 9.6% this week due to strong demand from millers and reduced supply from farmers holding stocks.',
-    date: '2 hours ago',
-    impact: 'positive',
-  },
-  {
-    id: 2,
-    title: 'Wheat imports expected to increase',
-    summary: 'Government announces plans to increase wheat imports to meet domestic demand as local production falls short of targets.',
-    date: '5 hours ago',
-    impact: 'negative',
-  },
-  {
-    id: 3,
-    title: 'Tobacco auction season begins',
-    summary: 'The 2025 tobacco auction season has officially opened with prices expected to remain firm due to global supply constraints.',
-    date: '1 day ago',
-    impact: 'positive',
-  },
-]
+import { fetchMarketPrices, getMarketNews, clearMarketCache, type CropPrice } from '@/lib/market-data'
 
 export default function MarketPrices() {
   const [searchTerm, setSearchTerm] = useState('')
+  const [prices, setPrices] = useState<CropPrice[]>(() => fetchMarketPrices())
+  const [lastRefresh, setLastRefresh] = useState(new Date())
+  const news = getMarketNews()
 
-  const filteredPrices = cropPrices.filter(
+  const filteredPrices = prices.filter(
     (price) =>
       price.crop.toLowerCase().includes(searchTerm.toLowerCase()) ||
       price.market.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
+  const handleRefresh = () => {
+    clearMarketCache()
+    setPrices(fetchMarketPrices())
+    setLastRefresh(new Date())
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Market Prices</h1>
-        <p className="text-muted-foreground">
-          Current crop prices and market intelligence for Zimbabwe
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Market Prices</h1>
+          <p className="text-muted-foreground">
+            Current crop prices and market intelligence for Zimbabwe
+            <span className="ml-2 text-xs">(Updated {lastRefresh.toLocaleTimeString()})</span>
+          </p>
+        </div>
+        <Button onClick={handleRefresh} variant="outline" size="sm">
+          <RefreshCw className="h-4 w-4 mr-1" /> Refresh Prices
+        </Button>
       </div>
 
       {/* Market Summary */}
@@ -84,7 +55,7 @@ export default function MarketPrices() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{cropPrices.length}</div>
+            <div className="text-2xl font-bold">{prices.length}</div>
             <p className="text-xs text-muted-foreground">Across 4 markets</p>
           </CardContent>
         </Card>
@@ -95,7 +66,7 @@ export default function MarketPrices() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {cropPrices.filter((p) => p.trend === 'up').length}
+              {prices.filter((p) => p.trend === 'up').length}
             </div>
             <p className="text-xs text-muted-foreground">Crops trending up</p>
           </CardContent>
@@ -107,7 +78,7 @@ export default function MarketPrices() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              {cropPrices.filter((p) => p.trend === 'down').length}
+              {prices.filter((p) => p.trend === 'down').length}
             </div>
             <p className="text-xs text-muted-foreground">Crops trending down</p>
           </CardContent>
@@ -181,7 +152,7 @@ export default function MarketPrices() {
                           ) : price.trend === 'down' ? (
                             <TrendingDown className="h-5 w-5 text-red-600 inline" />
                           ) : (
-                            <span className="text-muted-foreground">—</span>
+                            <span className="text-muted-foreground">-</span>
                           )}
                         </td>
                       </tr>
@@ -194,23 +165,19 @@ export default function MarketPrices() {
         </TabsContent>
 
         <TabsContent value="news" className="space-y-4">
-          {marketNews.map((news) => (
-            <Card key={news.id}>
+          {news.map((item) => (
+            <Card key={item.id}>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">{news.title}</CardTitle>
-                  <Badge
-                    variant={
-                      news.impact === 'positive' ? 'success' : 'destructive'
-                    }
-                  >
-                    {news.impact === 'positive' ? 'Bullish' : 'Bearish'}
+                  <CardTitle className="text-lg">{item.title}</CardTitle>
+                  <Badge variant={item.impact === 'positive' ? 'success' : 'destructive'}>
+                    {item.impact === 'positive' ? 'Bullish' : 'Bearish'}
                   </Badge>
                 </div>
-                <CardDescription>{news.date}</CardDescription>
+                <CardDescription>{item.date}</CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">{news.summary}</p>
+                <p className="text-muted-foreground">{item.summary}</p>
               </CardContent>
             </Card>
           ))}

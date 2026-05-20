@@ -42,7 +42,7 @@ export async function chatCompletion(
       'X-Title': 'OviGrow AI Agricultural Intelligence',
     },
     body: JSON.stringify({
-      model: request.model || 'anthropic/claude-3.5-sonnet',
+      model: request.model || 'anthropic/claude-sonnet-4',
       messages: request.messages,
       temperature: request.temperature ?? 0.7,
       max_tokens: request.max_tokens ?? 2048,
@@ -74,7 +74,7 @@ export async function streamChatCompletion(
         'X-Title': 'OviGrow AI Agricultural Intelligence',
       },
       body: JSON.stringify({
-        model: request.model || 'anthropic/claude-3.5-sonnet',
+        model: request.model || 'anthropic/claude-sonnet-4',
         messages: request.messages,
         temperature: request.temperature ?? 0.7,
         max_tokens: request.max_tokens ?? 2048,
@@ -125,12 +125,12 @@ export async function streamChatCompletion(
 }
 
 export const AI_MODELS = {
-  'claude-3.5-sonnet': 'anthropic/claude-3.5-sonnet',
-  'claude-3-haiku': 'anthropic/claude-3-haiku',
-  'gpt-4o': 'openai/gpt-4o',
-  'gpt-4o-mini': 'openai/gpt-4o-mini',
-  'gemini-pro': 'google/gemini-pro',
-  'gemini-flash': 'google/gemini-2.0-flash-001',
+  'claude-sonnet-4': 'anthropic/claude-sonnet-4',
+  'claude-haiku': 'anthropic/claude-haiku-latest',
+  'gpt-4.1': 'openai/gpt-4.1',
+  'gpt-4.1-mini': 'openai/gpt-4.1-mini',
+  'gemini-pro': 'google/gemini-pro-latest',
+  'gemini-flash': 'google/gemini-flash-latest',
 } as const
 
 export type AIModelKey = keyof typeof AI_MODELS

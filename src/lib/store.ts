@@ -15,10 +15,14 @@ interface AppState {
   sidebarOpen: boolean
   darkMode: boolean
   selectedModel: string
+  isOnline: boolean
+  lastSyncTime: number | null
   setUser: (user: User | null) => void
   toggleSidebar: () => void
   toggleDarkMode: () => void
   setSelectedModel: (model: string) => void
+  setOnline: (online: boolean) => void
+  setLastSyncTime: (time: number) => void
 }
 
 export const useStore = create<AppState>()(
@@ -27,7 +31,9 @@ export const useStore = create<AppState>()(
       user: null,
       sidebarOpen: true,
       darkMode: false,
-      selectedModel: 'anthropic/claude-3.5-sonnet',
+      selectedModel: 'anthropic/claude-sonnet-4',
+      isOnline: navigator.onLine,
+      lastSyncTime: null,
       setUser: (user) => set({ user }),
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       toggleDarkMode: () => {
@@ -38,6 +44,8 @@ export const useStore = create<AppState>()(
         })
       },
       setSelectedModel: (model) => set({ selectedModel: model }),
+      setOnline: (online) => set({ isOnline: online }),
+      setLastSyncTime: (time) => set({ lastSyncTime: time }),
     }),
     {
       name: 'ovigrow-storage',
@@ -45,6 +53,7 @@ export const useStore = create<AppState>()(
         darkMode: state.darkMode,
         selectedModel: state.selectedModel,
         sidebarOpen: state.sidebarOpen,
+        lastSyncTime: state.lastSyncTime,
       }),
     }
   )

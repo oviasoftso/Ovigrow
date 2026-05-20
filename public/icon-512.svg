@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="100" fill="#16a34a"/>
+  <g transform="translate(128, 80)">
+    <!-- Leaf -->
+    <path d="M128 40C128 40 64 64 40 128C16 192 64 280 128 336C192 280 240 192 216 128C192 64 128 40 128 40Z" fill="white" opacity="0.9"/>
+    <path d="M128 128V296" stroke="#16a34a" stroke-width="6" stroke-linecap="round"/>
+    <path d="M128 176L88 144" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/>
+    <path d="M128 224L168 192" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <text x="256" y="456" text-anchor="middle" fill="white" font-family="system-ui" font-weight="bold" font-size="72">OviGrow</text>
+</svg>

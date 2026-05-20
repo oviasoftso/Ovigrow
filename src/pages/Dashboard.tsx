@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -11,46 +12,10 @@ import {
   Beef,
   ArrowUpRight,
   ArrowDownRight,
+  Loader2,
 } from 'lucide-react'
-
-const stats = [
-  {
-    title: 'Active Crops',
-    value: '12',
-    change: '+2 this month',
-    trend: 'up',
-    icon: Sprout,
-    color: 'text-green-600',
-    bgColor: 'bg-green-100 dark:bg-green-900/20',
-  },
-  {
-    title: 'Soil Health',
-    value: '78%',
-    change: '+5% from last test',
-    trend: 'up',
-    icon: Droplets,
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-100 dark:bg-blue-900/20',
-  },
-  {
-    title: 'Weather Risk',
-    value: 'Low',
-    change: 'Clear skies ahead',
-    trend: 'up',
-    icon: CloudSun,
-    color: 'text-yellow-600',
-    bgColor: 'bg-yellow-100 dark:bg-yellow-900/20',
-  },
-  {
-    title: 'Market Price',
-    value: '$285/ton',
-    change: '+12% this week',
-    trend: 'up',
-    icon: TrendingUp,
-    color: 'text-emerald-600',
-    bgColor: 'bg-emerald-100 dark:bg-emerald-900/20',
-  },
-]
+import { fetchWeather, type WeatherData } from '@/lib/weather'
+import { fetchMarketPrices, type CropPrice } from '@/lib/market-data'
 
 const recentActivities = [
   { id: 1, action: 'Maize field irrigated', time: '2 hours ago', type: 'irrigation' },
@@ -68,6 +33,63 @@ const cropProgress = [
 ]
 
 export default function Dashboard() {
+  const { data: weather } = useQuery<WeatherData>({
+    queryKey: ['weather'],
+    queryFn: () => fetchWeather(),
+    staleTime: 30 * 60 * 1000,
+    retry: 1,
+  })
+
+  const marketPrices = fetchMarketPrices()
+  const maizePrice = marketPrices.find(p => p.crop === 'Maize (White)')
+
+  const weatherRisk = weather
+    ? weather.daily.slice(0, 3).some(d => d.rainChance > 60)
+      ? { value: 'High', change: 'Rain expected', trend: 'down' as const }
+      : weather.current.temperature > 35
+      ? { value: 'Medium', change: 'High temperatures', trend: 'down' as const }
+      : { value: 'Low', change: weather.current.label, trend: 'up' as const }
+    : { value: '...', change: 'Loading...', trend: 'up' as const }
+
+  const stats = [
+    {
+      title: 'Active Crops',
+      value: '12',
+      change: '+2 this month',
+      trend: 'up' as const,
+      icon: Sprout,
+      color: 'text-green-600',
+      bgColor: 'bg-green-100 dark:bg-green-900/20',
+    },
+    {
+      title: 'Soil Health',
+      value: '78%',
+      change: '+5% from last test',
+      trend: 'up' as const,
+      icon: Droplets,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100 dark:bg-blue-900/20',
+    },
+    {
+      title: 'Weather Risk',
+      value: weatherRisk.value,
+      change: weather ? `${weather.current.temperature}°C - ${weatherRisk.change}` : weatherRisk.change,
+      trend: weatherRisk.trend,
+      icon: CloudSun,
+      color: weatherRisk.value === 'High' ? 'text-red-600' : 'text-yellow-600',
+      bgColor: weatherRisk.value === 'High' ? 'bg-red-100 dark:bg-red-900/20' : 'bg-yellow-100 dark:bg-yellow-900/20',
+    },
+    {
+      title: 'Maize Price',
+      value: maizePrice ? `$${maizePrice.currentPrice}/ton` : '$285/ton',
+      change: maizePrice ? `${maizePrice.change > 0 ? '+' : ''}${maizePrice.change}% this week` : 'Loading...',
+      trend: maizePrice?.trend === 'down' ? 'down' as const : 'up' as const,
+      icon: TrendingUp,
+      color: 'text-emerald-600',
+      bgColor: 'bg-emerald-100 dark:bg-emerald-900/20',
+    },
+  ]
+
   return (
     <div className="space-y-6">
       <div>

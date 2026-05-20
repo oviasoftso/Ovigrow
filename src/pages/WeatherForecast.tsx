@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   CloudSun,
   Cloud,
@@ -10,70 +12,83 @@ import {
   Thermometer,
   Eye,
   Gauge,
+  CloudLightning,
+  CloudDrizzle,
+  CloudFog,
+  Snowflake,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react'
+import { fetchWeather, getDayName, generateFarmingAlerts, type WeatherData } from '@/lib/weather'
 
-const currentWeather = {
-  temperature: 28,
-  feelsLike: 30,
-  humidity: 65,
-  windSpeed: 12,
-  visibility: 10,
-  pressure: 1013,
-  uvIndex: 7,
-  condition: 'Partly Cloudy',
-  icon: CloudSun,
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  sun: Sun,
+  'cloud-sun': CloudSun,
+  cloud: Cloud,
+  'cloud-rain': CloudRain,
+  'cloud-drizzle': CloudDrizzle,
+  'cloud-lightning': CloudLightning,
+  'cloud-fog': CloudFog,
+  snowflake: Snowflake,
 }
 
-const hourlyForecast = [
-  { time: '09:00', temp: 26, icon: Sun, condition: 'Sunny' },
-  { time: '12:00', temp: 30, icon: CloudSun, condition: 'Partly Cloudy' },
-  { time: '15:00', temp: 32, icon: CloudSun, condition: 'Partly Cloudy' },
-  { time: '18:00', temp: 28, icon: Cloud, condition: 'Cloudy' },
-  { time: '21:00', temp: 24, icon: Cloud, condition: 'Cloudy' },
-]
-
-const weeklyForecast = [
-  { day: 'Mon', high: 32, low: 22, icon: Sun, condition: 'Sunny', rain: 0 },
-  { day: 'Tue', high: 30, low: 21, icon: CloudSun, condition: 'Partly Cloudy', rain: 10 },
-  { day: 'Wed', high: 28, low: 20, icon: CloudRain, condition: 'Rain', rain: 60 },
-  { day: 'Thu', high: 26, low: 19, icon: CloudRain, condition: 'Rain', rain: 80 },
-  { day: 'Fri', high: 29, low: 21, icon: Cloud, condition: 'Cloudy', rain: 20 },
-  { day: 'Sat', high: 31, low: 22, icon: CloudSun, condition: 'Partly Cloudy', rain: 5 },
-  { day: 'Sun', high: 33, low: 23, icon: Sun, condition: 'Sunny', rain: 0 },
-]
-
-const farmingAlerts = [
-  {
-    id: 1,
-    type: 'warning',
-    title: 'Heavy Rain Expected',
-    message: 'Wednesday-Thursday: 60-80% chance of heavy rainfall. Consider delaying fertilizer application.',
-    icon: CloudRain,
-  },
-  {
-    id: 2,
-    type: 'info',
-    title: 'Optimal Planting Window',
-    message: 'Friday-Sunday: Ideal conditions for planting maize. Soil moisture will be adequate after rain.',
-    icon: Sun,
-  },
-  {
-    id: 3,
-    type: 'danger',
-    title: 'High UV Index',
-    message: 'UV index will reach 8+ on Monday. Protect workers and consider shade for sensitive crops.',
-    icon: Thermometer,
-  },
-]
+function WeatherIcon({ icon, className }: { icon: string; className?: string }) {
+  const IconComponent = ICON_MAP[icon] || Cloud
+  return <IconComponent className={className} />
+}
 
 export default function WeatherForecast() {
+  const { data: weather, isLoading, error, refetch, dataUpdatedAt } = useQuery<WeatherData>({
+    queryKey: ['weather'],
+    queryFn: () => fetchWeather(),
+    staleTime: 30 * 60 * 1000, // 30 minutes
+    retry: 2,
+  })
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Weather Forecast</h1>
+          <p className="text-muted-foreground">Loading weather data...</p>
+        </div>
+        <Card className="h-48 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </Card>
+      </div>
+    )
+  }
+
+  if (error || !weather) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Weather Forecast</h1>
+          <p className="text-muted-foreground text-red-500">Failed to load weather data. Check your connection.</p>
+        </div>
+        <Button onClick={() => refetch()} variant="outline">
+          <RefreshCw className="h-4 w-4 mr-2" /> Retry
+        </Button>
+      </div>
+    )
+  }
+
+  const alerts = generateFarmingAlerts(weather)
+  const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString() : null
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Weather Forecast</h1>
-        <p className="text-muted-foreground">
-          Weather conditions and farming alerts for your region
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Weather Forecast</h1>
+          <p className="text-muted-foreground">
+            Live weather conditions for Harare, Zimbabwe
+            {lastUpdated && <span className="ml-2 text-xs">(Updated {lastUpdated})</span>}
+          </p>
+        </div>
+        <Button onClick={() => refetch()} variant="outline" size="sm">
+          <RefreshCw className="h-4 w-4 mr-1" /> Refresh
+        </Button>
       </div>
 
       {/* Current Weather */}
@@ -86,15 +101,15 @@ export default function WeatherForecast() {
                 Harare, Zimbabwe
               </CardDescription>
             </div>
-            <currentWeather.icon className="h-16 w-16" />
+            <WeatherIcon icon={weather.current.icon} className="h-16 w-16" />
           </div>
         </CardHeader>
         <CardContent>
           <div className="flex items-end gap-4">
-            <div className="text-6xl font-bold">{currentWeather.temperature}°C</div>
+            <div className="text-6xl font-bold">{weather.current.temperature}°C</div>
             <div className="mb-2">
-              <p className="text-lg">{currentWeather.condition}</p>
-              <p className="text-blue-100">Feels like {currentWeather.feelsLike}°C</p>
+              <p className="text-lg">{weather.current.label}</p>
+              <p className="text-blue-100">Feels like {weather.current.feelsLike}°C</p>
             </div>
           </div>
           <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -102,28 +117,28 @@ export default function WeatherForecast() {
               <Droplets className="h-5 w-5" />
               <div>
                 <p className="text-sm text-blue-100">Humidity</p>
-                <p className="font-semibold">{currentWeather.humidity}%</p>
+                <p className="font-semibold">{weather.current.humidity}%</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <Wind className="h-5 w-5" />
               <div>
                 <p className="text-sm text-blue-100">Wind</p>
-                <p className="font-semibold">{currentWeather.windSpeed} km/h</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Eye className="h-5 w-5" />
-              <div>
-                <p className="text-sm text-blue-100">Visibility</p>
-                <p className="font-semibold">{currentWeather.visibility} km</p>
+                <p className="font-semibold">{weather.current.windSpeed} km/h</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <Gauge className="h-5 w-5" />
               <div>
                 <p className="text-sm text-blue-100">Pressure</p>
-                <p className="font-semibold">{currentWeather.pressure} hPa</p>
+                <p className="font-semibold">{weather.current.pressure} hPa</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Thermometer className="h-5 w-5" />
+              <div>
+                <p className="text-sm text-blue-100">Feels Like</p>
+                <p className="font-semibold">{weather.current.feelsLike}°C</p>
               </div>
             </div>
           </div>
@@ -138,15 +153,15 @@ export default function WeatherForecast() {
         </CardHeader>
         <CardContent>
           <div className="flex gap-4 overflow-x-auto pb-2">
-            {hourlyForecast.map((hour) => (
+            {weather.hourly.map((hour) => (
               <div
                 key={hour.time}
                 className="flex flex-col items-center gap-2 rounded-lg border p-4 min-w-[100px]"
               >
                 <span className="text-sm text-muted-foreground">{hour.time}</span>
-                <hour.icon className="h-8 w-8 text-blue-600" />
-                <span className="text-lg font-semibold">{hour.temp}°C</span>
-                <span className="text-xs text-muted-foreground">{hour.condition}</span>
+                <WeatherIcon icon={hour.icon} className="h-8 w-8 text-blue-600" />
+                <span className="text-lg font-semibold">{hour.temperature}°C</span>
+                <span className="text-xs text-muted-foreground">{hour.label}</span>
               </div>
             ))}
           </div>
@@ -161,18 +176,18 @@ export default function WeatherForecast() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {weeklyForecast.map((day) => (
+            {weather.daily.map((day) => (
               <div
-                key={day.day}
+                key={day.date}
                 className="flex items-center justify-between rounded-lg border p-4"
               >
                 <div className="flex items-center gap-4 w-24">
-                  <span className="font-medium">{day.day}</span>
-                  <day.icon className="h-6 w-6 text-blue-600" />
+                  <span className="font-medium">{getDayName(day.date)}</span>
+                  <WeatherIcon icon={day.icon} className="h-6 w-6 text-blue-600" />
                 </div>
                 <div className="flex items-center gap-4 flex-1">
                   <span className="text-sm text-muted-foreground w-20">
-                    {day.condition}
+                    {day.label}
                   </span>
                   <div className="flex-1 max-w-xs">
                     <div className="flex items-center gap-2">
@@ -190,10 +205,10 @@ export default function WeatherForecast() {
                     </div>
                   </div>
                   <Badge
-                    variant={day.rain > 50 ? 'destructive' : day.rain > 20 ? 'warning' : 'outline'}
+                    variant={day.rainChance > 50 ? 'destructive' : day.rainChance > 20 ? 'warning' : 'outline'}
                     className="w-16 justify-center"
                   >
-                    {day.rain}%
+                    {day.rainChance}%
                   </Badge>
                 </div>
               </div>
@@ -210,9 +225,9 @@ export default function WeatherForecast() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {farmingAlerts.map((alert) => (
+            {alerts.map((alert, i) => (
               <div
-                key={alert.id}
+                key={i}
                 className={`flex items-start gap-4 rounded-lg border p-4 ${
                   alert.type === 'danger'
                     ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/20'
@@ -221,7 +236,7 @@ export default function WeatherForecast() {
                     : 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20'
                 }`}
               >
-                <alert.icon
+                <Thermometer
                   className={`h-6 w-6 mt-0.5 ${
                     alert.type === 'danger'
                       ? 'text-red-600'

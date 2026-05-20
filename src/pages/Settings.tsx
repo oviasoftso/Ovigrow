@@ -10,11 +10,11 @@ import { User, Bell, Bot, Palette, Database, Save, Moon, Sun } from 'lucide-reac
 import toast from 'react-hot-toast'
 
 const AI_MODELS = [
-  { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
-  { value: 'openai/gpt-4o', label: 'GPT-4o' },
-  { value: 'google/gemini-pro', label: 'Gemini Pro' },
-  { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini' },
-  { value: 'google/gemini-2.0-flash-001', label: 'Gemini Flash' },
+  { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4' },
+  { value: 'openai/gpt-4.1', label: 'GPT-4.1' },
+  { value: 'google/gemini-pro-latest', label: 'Gemini Pro' },
+  { value: 'openai/gpt-4.1-mini', label: 'GPT-4.1 Mini' },
+  { value: 'google/gemini-flash-latest', label: 'Gemini Flash' },
 ]
 
 export default function Settings() {
