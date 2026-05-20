@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { useStore } from '@/lib/store'
 
 interface AuthContextType {
@@ -17,7 +17,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { user, setUser } = useStore()
 
   useEffect(() => {
-    // Check for existing session
+    if (!isSupabaseConfigured) {
+      console.warn('Supabase not configured, running in demo mode')
+      setIsLoading(false)
+      return
+    }
+
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
@@ -32,7 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           })
         }
       } catch (error) {
-        console.warn('Supabase not configured, running in demo mode')
+        console.warn('Supabase session check failed, running in demo mode')
       }
       setIsLoading(false)
     }
@@ -56,9 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     )
 
-    return () => {
-      subscription.unsubscribe()
-    }
+    return () => subscription.unsubscribe()
   }, [setUser])
 
   const signIn = async (email: string, password: string) => {
@@ -84,15 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider
-      value={{
-        isAuthenticated: !!user,
-        isLoading,
-        signIn,
-        signUp,
-        signOut,
-      }}
-    >
+    <AuthContext.Provider value={{ isAuthenticated: !!user, isLoading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   )

@@ -1,9 +1,15 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co'
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+export const isSupabaseConfigured = !!(
+  import.meta.env.VITE_SUPABASE_URL &&
+  import.meta.env.VITE_SUPABASE_ANON_KEY &&
+  import.meta.env.VITE_SUPABASE_URL !== 'https://placeholder.supabase.co'
+)
 
 export type Database = {
   public: {
@@ -29,30 +35,33 @@ export type Database = {
           id: string
           user_id: string
           name: string
-          variety: string | null
+          variety: string
+          field: string
           planting_date: string
-          expected_harvest: string | null
+          expected_harvest: string
           status: 'planted' | 'growing' | 'ready' | 'harvested'
-          area: number | null
-          notes: string | null
+          progress: number
+          area: number
+          notes: string
           created_at: string
+          updated_at: string
         }
-        Insert: Omit<Database['public']['Tables']['crops']['Row'], 'id' | 'created_at'>
+        Insert: Omit<Database['public']['Tables']['crops']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['crops']['Insert']>
       }
       soil_tests: {
         Row: {
           id: string
           user_id: string
-          field_name: string
+          field: string
+          date: string
           ph: number
           nitrogen: number
           phosphorus: number
           potassium: number
           moisture: number
           organic_matter: number
-          test_date: string
-          notes: string | null
+          notes: string
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['soil_tests']['Row'], 'id' | 'created_at'>
@@ -64,12 +73,15 @@ export type Database = {
           user_id: string
           title: string
           content: string
-          category: 'planting' | 'irrigation' | 'fertilizing' | 'pest_control' | 'harvest' | 'general'
-          weather: string | null
-          photos: string[] | null
+          category: string
+          field: string
+          date: string
+          weather: string
+          mood: string
           created_at: string
+          updated_at: string
         }
-        Insert: Omit<Database['public']['Tables']['farm_diary']['Row'], 'id' | 'created_at'>
+        Insert: Omit<Database['public']['Tables']['farm_diary']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['farm_diary']['Insert']>
       }
       transactions: {
@@ -77,8 +89,8 @@ export type Database = {
           id: string
           user_id: string
           type: 'income' | 'expense'
-          category: string
           amount: number
+          category: string
           description: string
           date: string
           created_at: string
@@ -91,14 +103,17 @@ export type Database = {
           id: string
           user_id: string
           type: string
-          breed: string | null
+          breed: string
           count: number
           health_status: 'healthy' | 'sick' | 'treatment'
-          last_vaccination: string | null
-          notes: string | null
+          last_vaccination: string
+          next_vaccination: string
+          feeding_schedule: string
+          notes: string
           created_at: string
+          updated_at: string
         }
-        Insert: Omit<Database['public']['Tables']['livestock']['Row'], 'id' | 'created_at'>
+        Insert: Omit<Database['public']['Tables']['livestock']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['livestock']['Insert']>
       }
     }
