@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from '@/components/auth/AuthProvider'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import Dashboard from '@/pages/Dashboard'
@@ -16,10 +17,12 @@ import Marketplace from '@/pages/Marketplace'
 import FinanceTracker from '@/pages/FinanceTracker'
 import LivestockManager from '@/pages/LivestockManager'
 import Settings from '@/pages/Settings'
+import DayPlanner from '@/pages/DayPlanner'
 
 export default function App() {
   return (
     <AuthProvider>
+      <Toaster position="top-right" />
       <Routes>
         <Route path="/" element={<DashboardLayout />}>
           <Route index element={<Dashboard />} />
@@ -36,6 +39,7 @@ export default function App() {
           <Route path="marketplace" element={<Marketplace />} />
           <Route path="finance" element={<FinanceTracker />} />
           <Route path="livestock" element={<LivestockManager />} />
+          <Route path="planner" element={<DayPlanner />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
