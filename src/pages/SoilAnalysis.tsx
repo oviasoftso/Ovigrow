@@ -13,7 +13,12 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
-import { Plus, Droplets, Leaf, Zap, TestTube } from 'lucide-react'
+import { Plus, Droplets, Leaf, Zap, TestTube, Sparkles, Loader2, Bot } from 'lucide-react'
+import { useStore } from '@/lib/store'
+import { streamChatCompletion, type ChatMessage } from '@/lib/openrouter'
+import { toast } from 'react-hot-toast'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface SoilTest {
   id: string
@@ -67,9 +72,17 @@ const initialTests: SoilTest[] = [
   },
 ]
 
+const SYSTEM_PROMPT = `You are OviGrow AI, a soil scientist specializing in Zimbabwean agriculture.
+Analyze the soil test data and provide specific recommendations for fertilizers, soil amendments, and suitable crops.
+Use markdown formatting.`
+
 export default function SoilAnalysis() {
   const [tests, setTests] = useState<SoilTest[]>(initialTests)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [aiReport, setAiReport] = useState('')
+  const { selectedModel } = useStore()
+
   const [newTest, setNewTest] = useState({
     fieldName: '',
     ph: '',
@@ -121,6 +134,51 @@ export default function SoilAnalysis() {
     setIsAddDialogOpen(false)
   }
 
+  const handleAIAnalysis = async () => {
+    if (tests.length === 0) return
+
+    setIsAnalyzing(true)
+    setAiReport('')
+
+    const latestTest = tests[0]
+    const messages: ChatMessage[] = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: `Analyze this soil test:
+        Field: ${latestTest.fieldName}
+        pH: ${latestTest.ph}
+        Nitrogen: ${latestTest.nitrogen} ppm
+        Phosphorus: ${latestTest.phosphorus} ppm
+        Potassium: ${latestTest.potassium} ppm
+        Organic Matter: ${latestTest.organicMatter}%`
+      }
+    ]
+
+    try {
+      await streamChatCompletion(
+        {
+          model: selectedModel,
+          messages,
+        },
+        (chunk) => {
+          setAiReport(prev => prev + chunk)
+        },
+        () => {
+          setIsAnalyzing(false)
+          toast.success('Soil Analysis Complete!')
+        },
+        (error) => {
+          setIsAnalyzing(false)
+          toast.error(`AI Error: ${error.message}`)
+        }
+      )
+    } catch (error) {
+      setIsAnalyzing(false)
+      toast.error('Failed to connect to AI service.')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -130,120 +188,144 @@ export default function SoilAnalysis() {
             Monitor soil health and nutrient levels across your fields
           </p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Soil Test
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Soil Test Results</DialogTitle>
-              <DialogDescription>
-                Record new soil test results for your field
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Field Name</label>
-                <Input
-                  placeholder="e.g., Field A - North"
-                  value={newTest.fieldName}
-                  onChange={(e) =>
-                    setNewTest({ ...newTest, fieldName: e.target.value })
-                  }
-                />
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">pH Level</label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    placeholder="6.5"
-                    value={newTest.ph}
-                    onChange={(e) =>
-                      setNewTest({ ...newTest, ph: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Nitrogen (ppm)</label>
-                  <Input
-                    type="number"
-                    placeholder="45"
-                    value={newTest.nitrogen}
-                    onChange={(e) =>
-                      setNewTest({ ...newTest, nitrogen: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Phosphorus (ppm)</label>
-                  <Input
-                    type="number"
-                    placeholder="32"
-                    value={newTest.phosphorus}
-                    onChange={(e) =>
-                      setNewTest({ ...newTest, phosphorus: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Potassium (ppm)</label>
-                  <Input
-                    type="number"
-                    placeholder="28"
-                    value={newTest.potassium}
-                    onChange={(e) =>
-                      setNewTest({ ...newTest, potassium: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Moisture (%)</label>
-                  <Input
-                    type="number"
-                    placeholder="65"
-                    value={newTest.moisture}
-                    onChange={(e) =>
-                      setNewTest({ ...newTest, moisture: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Organic Matter (%)</label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    placeholder="3.2"
-                    value={newTest.organicMatter}
-                    onChange={(e) =>
-                      setNewTest({ ...newTest, organicMatter: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Notes</label>
-                <Textarea
-                  placeholder="Any observations or recommendations..."
-                  value={newTest.notes}
-                  onChange={(e) =>
-                    setNewTest({ ...newTest, notes: e.target.value })
-                  }
-                />
-              </div>
-              <Button onClick={handleAddTest} className="w-full">
-                Save Test Results
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleAIAnalysis} disabled={isAnalyzing || tests.length === 0}>
+            {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+            AI Recommendations
+          </Button>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Soil Test
               </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Soil Test Results</DialogTitle>
+                <DialogDescription>
+                  Record new soil test results for your field
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Field Name</label>
+                  <Input
+                    placeholder="e.g., Field A - North"
+                    value={newTest.fieldName}
+                    onChange={(e) =>
+                      setNewTest({ ...newTest, fieldName: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">pH Level</label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      placeholder="6.5"
+                      value={newTest.ph}
+                      onChange={(e) =>
+                        setNewTest({ ...newTest, ph: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Nitrogen (ppm)</label>
+                    <Input
+                      type="number"
+                      placeholder="45"
+                      value={newTest.nitrogen}
+                      onChange={(e) =>
+                        setNewTest({ ...newTest, nitrogen: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Phosphorus (ppm)</label>
+                    <Input
+                      type="number"
+                      placeholder="32"
+                      value={newTest.phosphorus}
+                      onChange={(e) =>
+                        setNewTest({ ...newTest, phosphorus: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Potassium (ppm)</label>
+                    <Input
+                      type="number"
+                      placeholder="28"
+                      value={newTest.potassium}
+                      onChange={(e) =>
+                        setNewTest({ ...newTest, potassium: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Moisture (%)</label>
+                    <Input
+                      type="number"
+                      placeholder="65"
+                      value={newTest.moisture}
+                      onChange={(e) =>
+                        setNewTest({ ...newTest, moisture: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Organic Matter (%)</label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      placeholder="3.2"
+                      value={newTest.organicMatter}
+                      onChange={(e) =>
+                        setNewTest({ ...newTest, organicMatter: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Notes</label>
+                  <Textarea
+                    placeholder="Any observations or recommendations..."
+                    value={newTest.notes}
+                    onChange={(e) =>
+                      setNewTest({ ...newTest, notes: e.target.value })
+                    }
+                  />
+                </div>
+                <Button onClick={handleAddTest} className="w-full">
+                  Save Test Results
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
+
+      {aiReport && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Bot className="h-5 w-5 text-primary" />
+              AI Soil Insights
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {aiReport}
+              </ReactMarkdown>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Soil Health Overview */}
       <div className="grid gap-4 md:grid-cols-4">
