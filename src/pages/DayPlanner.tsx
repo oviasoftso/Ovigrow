@@ -14,7 +14,8 @@ import {
   Sprout,
   MoreVertical,
   Trash2,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  Loader2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,7 +27,20 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'react-hot-toast'
+import { streamChatCompletion, type ChatMessage } from '@/lib/openrouter'
+import { useStore } from '@/lib/store'
 
 interface Task {
   id: string
@@ -40,11 +54,15 @@ interface Task {
 }
 
 const parseTimeToMinutes = (timeStr: string): number => {
-  const [time, modifier] = timeStr.split(' ')
-  let [hours, minutes] = time.split(':').map(Number)
-  if (hours === 12) hours = 0
-  if (modifier === 'PM') hours += 12
-  return hours * 60 + minutes
+  try {
+    const [time, modifier] = timeStr.split(' ')
+    let [hours, minutes] = time.split(':').map(Number)
+    if (hours === 12) hours = 0
+    if (modifier === 'PM') hours += 12
+    return hours * 60 + minutes
+  } catch {
+    return 0
+  }
 }
 
 const initialTasks: Task[] = [
@@ -68,39 +86,6 @@ const initialTasks: Task[] = [
   }
 ]
 
-const aiSuggestedTasks: Task[] = [
-  {
-    id: 'ai-1',
-    time: '10:00 AM',
-    title: 'Field A Nitrogen Application',
-    description: 'Based on V8 growth stage and soil data, apply 50kg/ha nitrogen.',
-    category: 'maintenance',
-    completed: false,
-    isAI: true,
-    sortTime: parseTimeToMinutes('10:00 AM')
-  },
-  {
-    id: 'ai-2',
-    time: '02:00 PM',
-    title: 'Emergency Drainage Check',
-    description: 'High rain forecast. Verify drainage channels in Field B are clear.',
-    category: 'maintenance',
-    completed: false,
-    isAI: true,
-    sortTime: parseTimeToMinutes('02:00 PM')
-  },
-  {
-    id: 'ai-3',
-    time: '04:30 PM',
-    title: 'Livestock Water Trough Refill',
-    description: 'Water levels dropping in North paddock. Refill before evening.',
-    category: 'general',
-    completed: false,
-    isAI: true,
-    sortTime: parseTimeToMinutes('04:30 PM')
-  }
-]
-
 const categoryStyles = {
   irrigation: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
   planting: 'bg-green-500/10 text-green-600 border-green-500/20',
@@ -109,9 +94,31 @@ const categoryStyles = {
   general: 'bg-slate-500/10 text-slate-600 border-slate-500/20'
 }
 
+const SYSTEM_PROMPT = `You are OviGrow AI, an expert agricultural planner for Zimbabwe.
+Generate a list of 3-5 specific farming tasks for today based on the provided context (weather, crops, location).
+Output MUST be a JSON array of objects with this structure:
+[
+  {
+    "time": "HH:MM AM/PM",
+    "title": "Short task title",
+    "description": "Specific action-oriented description",
+    "category": "irrigation" | "planting" | "maintenance" | "harvest" | "general"
+  }
+]
+Only output the JSON array, nothing else.`
+
 export default function DayPlanner() {
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isAddOpen, setIsAddOpen] = useState(false)
+  const { user, selectedModel } = useStore()
+
+  const [newTask, setNewTask] = useState({
+    title: '',
+    time: '08:00 AM',
+    description: '',
+    category: 'general' as Task['category']
+  })
 
   const toggleTask = (id: string) => {
     setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t))
@@ -121,32 +128,88 @@ export default function DayPlanner() {
     setTasks(tasks.filter(t => t.id !== id))
   }
 
-  const handleSmartGenerate = () => {
+  const handleAddTask = () => {
+    if (!newTask.title) return
+    const task: Task = {
+      id: Date.now().toString(),
+      ...newTask,
+      completed: false,
+      sortTime: parseTimeToMinutes(newTask.time)
+    }
+    const updatedTasks = [...tasks, task].sort((a, b) => a.sortTime - b.sortTime)
+    setTasks(updatedTasks)
+    setNewTask({ title: '', time: '08:00 AM', description: '', category: 'general' })
+    setIsAddOpen(false)
+    toast.success('Task added to your schedule')
+  }
+
+  const handleSmartGenerate = async () => {
     setIsGenerating(true)
 
-    // Simulate AI generation delay
-    setTimeout(() => {
-      const newTasks = [...tasks]
-      aiSuggestedTasks.forEach(aiTask => {
-        if (!newTasks.find(t => t.id === aiTask.id)) {
-          newTasks.push(aiTask)
-        }
-      })
+    const context = `
+      Location: ${user?.location || 'Zimbabwe'}
+      User Name: ${user?.full_name || 'Farmer'}
+      Crops: Maize, Wheat (simulated)
+      Weather: High rain probability (85%) starting at 2:00 PM.
+    `
 
-      // Sort tasks by time correctly
-      newTasks.sort((a, b) => a.sortTime - b.sortTime)
+    const messages: ChatMessage[] = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: `Generate tasks for today. Context: ${context}` }
+    ]
 
-      setTasks(newTasks)
-      setIsGenerating(false)
-      toast.success('AI generated 3 new tasks for you!', {
-        icon: '✨',
-        style: {
-          borderRadius: '10px',
-          background: '#333',
-          color: '#fff',
+    let aiResponse = ''
+    try {
+      await streamChatCompletion(
+        {
+          model: selectedModel,
+          messages,
+          temperature: 0.7,
         },
-      })
-    }, 2000)
+        (chunk) => {
+          aiResponse += chunk
+        },
+        () => {
+          try {
+            // Find JSON array in response if AI added text
+            const jsonStart = aiResponse.indexOf('[')
+            const jsonEnd = aiResponse.lastIndexOf(']') + 1
+            const jsonStr = aiResponse.substring(jsonStart, jsonEnd)
+            const generatedTasks = JSON.parse(jsonStr)
+
+            const newTasks = [...tasks]
+            generatedTasks.forEach((t: any, index: number) => {
+              newTasks.push({
+                id: `ai-${Date.now()}-${index}`,
+                title: t.title,
+                time: t.time,
+                description: t.description,
+                category: t.category,
+                completed: false,
+                isAI: true,
+                sortTime: parseTimeToMinutes(t.time)
+              })
+            })
+
+            newTasks.sort((a, b) => a.sortTime - b.sortTime)
+            setTasks(newTasks)
+            setIsGenerating(false)
+            toast.success(`AI generated ${generatedTasks.length} new tasks!`, { icon: '✨' })
+          } catch (e) {
+            console.error('Failed to parse AI response:', aiResponse)
+            setIsGenerating(false)
+            toast.error('AI generated invalid data. Please try again.')
+          }
+        },
+        (error) => {
+          setIsGenerating(false)
+          toast.error(`AI Error: ${error.message}`)
+        }
+      )
+    } catch (error) {
+      setIsGenerating(false)
+      toast.error('Failed to connect to AI service.')
+    }
   }
 
   const completedCount = tasks.filter(t => t.completed).length
@@ -180,7 +243,7 @@ export default function DayPlanner() {
                   exit={{ opacity: 0, y: -10 }}
                   className="flex items-center gap-2"
                 >
-                  <Sparkles className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   <span>Analyzing Data...</span>
                 </motion.div>
               ) : (
@@ -197,10 +260,68 @@ export default function DayPlanner() {
               )}
             </AnimatePresence>
           </Button>
-          <Button variant="outline" className="border-primary/20 bg-background/50 backdrop-blur-sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Task
-          </Button>
+
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="border-primary/20 bg-background/50 backdrop-blur-sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Task
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Manual Task</DialogTitle>
+                <DialogDescription>Schedule a new activity for today.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 pt-4">
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Task Title</label>
+                  <Input
+                    placeholder="e.g., Fix irrigation pump"
+                    value={newTask.title}
+                    onChange={e => setNewTask({...newTask, title: e.target.value})}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">Time</label>
+                    <Input
+                      placeholder="e.g., 09:00 AM"
+                      value={newTask.time}
+                      onChange={e => setNewTask({...newTask, time: e.target.value})}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">Category</label>
+                    <Select
+                      value={newTask.category}
+                      onValueChange={v => setNewTask({...newTask, category: v as any})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="general">General</SelectItem>
+                        <SelectItem value="irrigation">Irrigation</SelectItem>
+                        <SelectItem value="planting">Planting</SelectItem>
+                        <SelectItem value="maintenance">Maintenance</SelectItem>
+                        <SelectItem value="harvest">Harvest</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Description</label>
+                  <Textarea
+                    placeholder="Provide some details..."
+                    value={newTask.description}
+                    onChange={e => setNewTask({...newTask, description: e.target.value})}
+                  />
+                </div>
+                <Button onClick={handleAddTask} className="w-full">Save Task</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 

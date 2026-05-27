@@ -14,7 +14,12 @@ import {
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Plus, Search, Sprout, Calendar, MapPin, TrendingUp } from 'lucide-react'
+import { Plus, Search, Sprout, Calendar, MapPin, TrendingUp, Sparkles, Loader2, Bot } from 'lucide-react'
+import { useStore } from '@/lib/store'
+import { streamChatCompletion, type ChatMessage } from '@/lib/openrouter'
+import { toast } from 'react-hot-toast'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface Crop {
   id: string
@@ -80,10 +85,19 @@ const initialCrops: Crop[] = [
   },
 ]
 
+const SYSTEM_PROMPT = `You are OviGrow AI, a crop specialist for Zimbabwe.
+Provide insights and recommendations based on the current crop monitoring data.
+Include growth stage analysis and potential risks.
+Use markdown formatting.`
+
 export default function CropMonitoring() {
   const [crops, setCrops] = useState<Crop[]>(initialCrops)
   const [searchTerm, setSearchTerm] = useState('')
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [aiReport, setAiReport] = useState('')
+  const { selectedModel } = useStore()
+
   const [newCrop, setNewCrop] = useState({
     name: '',
     variety: '',
@@ -121,6 +135,45 @@ export default function CropMonitoring() {
     setIsAddDialogOpen(false)
   }
 
+  const handleAIAdvisor = async () => {
+    if (crops.length === 0) return
+
+    setIsAnalyzing(true)
+    setAiReport('')
+
+    const messages: ChatMessage[] = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: `Analyze my current crops:
+        ${crops.map(c => `- ${c.name} (${c.variety}) in ${c.field}: ${c.status}, ${c.progress}% progress`).join('\n')}`
+      }
+    ]
+
+    try {
+      await streamChatCompletion(
+        {
+          model: selectedModel,
+          messages,
+        },
+        (chunk) => {
+          setAiReport(prev => prev + chunk)
+        },
+        () => {
+          setIsAnalyzing(false)
+          toast.success('Crop Insights Generated!')
+        },
+        (error) => {
+          setIsAnalyzing(false)
+          toast.error(`AI Error: ${error.message}`)
+        }
+      )
+    } catch (error) {
+      setIsAnalyzing(false)
+      toast.error('Failed to connect to AI service.')
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'planted':
@@ -145,103 +198,127 @@ export default function CropMonitoring() {
             Track and manage your crops from planting to harvest
           </p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Crop
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add New Crop</DialogTitle>
-              <DialogDescription>
-                Record a new crop planting in your farm
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Crop Name</label>
-                  <Input
-                    placeholder="e.g., Maize"
-                    value={newCrop.name}
-                    onChange={(e) =>
-                      setNewCrop({ ...newCrop, name: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Variety</label>
-                  <Input
-                    placeholder="e.g., SC 403"
-                    value={newCrop.variety}
-                    onChange={(e) =>
-                      setNewCrop({ ...newCrop, variety: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Field/Location</label>
-                <Input
-                  placeholder="e.g., Field A - North"
-                  value={newCrop.field}
-                  onChange={(e) =>
-                    setNewCrop({ ...newCrop, field: e.target.value })
-                  }
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Planting Date</label>
-                  <Input
-                    type="date"
-                    value={newCrop.plantingDate}
-                    onChange={(e) =>
-                      setNewCrop({ ...newCrop, plantingDate: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Expected Harvest</label>
-                  <Input
-                    type="date"
-                    value={newCrop.expectedHarvest}
-                    onChange={(e) =>
-                      setNewCrop({ ...newCrop, expectedHarvest: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Area (hectares)</label>
-                <Input
-                  type="number"
-                  placeholder="e.g., 5"
-                  value={newCrop.area}
-                  onChange={(e) =>
-                    setNewCrop({ ...newCrop, area: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Notes</label>
-                <Textarea
-                  placeholder="Any additional notes..."
-                  value={newCrop.notes}
-                  onChange={(e) =>
-                    setNewCrop({ ...newCrop, notes: e.target.value })
-                  }
-                />
-              </div>
-              <Button onClick={handleAddCrop} className="w-full">
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleAIAdvisor} disabled={isAnalyzing || crops.length === 0}>
+            {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+            AI Advisor
+          </Button>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
                 Add Crop
               </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Crop</DialogTitle>
+                <DialogDescription>
+                  Record a new crop planting in your farm
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Crop Name</label>
+                    <Input
+                      placeholder="e.g., Maize"
+                      value={newCrop.name}
+                      onChange={(e) =>
+                        setNewCrop({ ...newCrop, name: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Variety</label>
+                    <Input
+                      placeholder="e.g., SC 403"
+                      value={newCrop.variety}
+                      onChange={(e) =>
+                        setNewCrop({ ...newCrop, variety: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Field/Location</label>
+                  <Input
+                    placeholder="e.g., Field A - North"
+                    value={newCrop.field}
+                    onChange={(e) =>
+                      setNewCrop({ ...newCrop, field: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Planting Date</label>
+                    <Input
+                      type="date"
+                      value={newCrop.plantingDate}
+                      onChange={(e) =>
+                        setNewCrop({ ...newCrop, plantingDate: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Expected Harvest</label>
+                    <Input
+                      type="date"
+                      value={newCrop.expectedHarvest}
+                      onChange={(e) =>
+                        setNewCrop({ ...newCrop, expectedHarvest: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Area (hectares)</label>
+                  <Input
+                    type="number"
+                    placeholder="e.g., 5"
+                    value={newCrop.area}
+                    onChange={(e) =>
+                      setNewCrop({ ...newCrop, area: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Notes</label>
+                  <Textarea
+                    placeholder="Any additional notes..."
+                    value={newCrop.notes}
+                    onChange={(e) =>
+                      setNewCrop({ ...newCrop, notes: e.target.value })
+                    }
+                  />
+                </div>
+                <Button onClick={handleAddCrop} className="w-full">
+                  Add Crop
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
+
+      {aiReport && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Bot className="h-5 w-5 text-primary" />
+              AI Crop Insights
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {aiReport}
+              </ReactMarkdown>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Search */}
       <div className="relative">

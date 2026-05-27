@@ -17,7 +17,13 @@ import {
   Camera,
   Loader2,
   ImageIcon,
+  Sparkles,
 } from 'lucide-react'
+import { streamChatCompletion, type ChatMessage } from '@/lib/openrouter'
+import { useStore } from '@/lib/store'
+import { toast } from 'react-hot-toast'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface Pest {
   id: string
@@ -122,16 +128,20 @@ const commonPests: Pest[] = [
   },
 ]
 
-type DetectionState = 'idle' | 'analyzing' | 'complete'
+const SYSTEM_PROMPT = `You are OviGrow AI, a pest detection specialist for Zimbabwe.
+Analyze the provided symptoms and return a detailed diagnosis, treatment plan, and prevention strategy.
+Use markdown formatting.`
 
 export default function PestDetection() {
-  const [detectionState, setDetectionState] = useState<DetectionState>('idle')
+  const [detectionState, setDetectionState] = useState<'idle' | 'analyzing' | 'complete'>('idle')
   const [progress, setProgress] = useState(0)
-  const [detectedPest, setDetectedPest] = useState<Pest | null>(null)
+  const [aiReport, setAiReport] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [symptomNotes, setSymptomNotes] = useState('')
   const [selectedPest, setSelectedPest] = useState<Pest | null>(null)
+  const [cropType, setCropType] = useState('Maize')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { selectedModel } = useStore()
 
   const filteredPests = commonPests.filter(
     (p) =>
@@ -140,21 +150,45 @@ export default function PestDetection() {
       p.category.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const simulateDetection = () => {
+  const handleAIDetection = async () => {
+    if (!symptomNotes) {
+      toast.error('Please describe the symptoms first.')
+      return
+    }
+
     setDetectionState('analyzing')
-    setDetectedPest(null)
-    setProgress(0)
-    let p = 0
-    const interval = setInterval(() => {
-      p += Math.random() * 18 + 5
-      if (p >= 100) {
-        p = 100
-        clearInterval(interval)
-        setDetectedPest(commonPests[Math.floor(Math.random() * commonPests.length)])
-        setDetectionState('complete')
-      }
-      setProgress(p)
-    }, 250)
+    setAiReport('')
+    setProgress(10)
+
+    const messages: ChatMessage[] = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: `Crop: ${cropType}\nSymptoms: ${symptomNotes}` }
+    ]
+
+    try {
+      await streamChatCompletion(
+        {
+          model: selectedModel,
+          messages,
+        },
+        (chunk) => {
+          setAiReport(prev => prev + chunk)
+          setProgress(prev => Math.min(prev + 2, 90))
+        },
+        () => {
+          setDetectionState('complete')
+          setProgress(100)
+          toast.success('AI Analysis Complete!')
+        },
+        (error) => {
+          setDetectionState('idle')
+          toast.error(`AI Error: ${error.message}`)
+        }
+      )
+    } catch (error) {
+      setDetectionState('idle')
+      toast.error('Failed to connect to AI service.')
+    }
   }
 
   const getSeverityVariant = (severity: string) => {
@@ -247,50 +281,29 @@ export default function PestDetection() {
 
         <TabsContent value="detect" className="space-y-4">
           <div className="grid gap-6 md:grid-cols-2">
-            {/* Upload Card */}
+            {/* Input Card */}
             <Card>
               <CardHeader>
-                <CardTitle>Upload Image for AI Analysis</CardTitle>
+                <CardTitle>AI Diagnostic Input</CardTitle>
                 <CardDescription>
-                  Take a clear photo of the affected plant part for identification
+                  Provide details or an image for OviGrow AI to analyze
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  className="hidden"
-                  accept="image/*"
-                  onChange={simulateDetection}
-                />
-
-                {detectionState === 'idle' ? (
-                  <div
-                    className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-12 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload className="h-12 w-12 text-muted-foreground mb-4" />
-                    <p className="text-sm font-medium">Click to upload or drag image</p>
-                    <p className="text-xs text-muted-foreground">Supports JPG, PNG, WebP up to 10MB</p>
-                  </div>
-                ) : detectionState === 'analyzing' ? (
-                  <div className="space-y-6 p-8 text-center">
-                    <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
-                    <div className="space-y-2">
-                      <p className="font-medium text-lg">Analyzing image with AI...</p>
-                      <p className="text-sm text-muted-foreground">
-                        Identifying pest species and assessing damage level
-                      </p>
-                    </div>
-                    <Progress value={progress} className="h-2" />
-                    <p className="text-sm text-muted-foreground">{Math.round(progress)}% complete</p>
-                  </div>
-                ) : null}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Crop Type</label>
+                  <Input
+                    value={cropType}
+                    onChange={e => setCropType(e.target.value)}
+                    placeholder="e.g., Maize, Tobacco, Tomatoes"
+                  />
+                </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Describe symptoms (optional)</label>
+                  <label className="text-sm font-medium">Describe Symptoms</label>
                   <Textarea
-                    placeholder="e.g., Holes in leaves, wilting, discoloration, larvae visible..."
+                    placeholder="Describe what you see: holes in leaves, discoloration, wilting, visible insects..."
+                    rows={4}
                     value={symptomNotes}
                     onChange={(e) => setSymptomNotes(e.target.value)}
                   />
@@ -298,8 +311,8 @@ export default function PestDetection() {
 
                 <div className="flex gap-2">
                   <Button
-                    onClick={simulateDetection}
-                    className="flex-1"
+                    onClick={handleAIDetection}
+                    className="flex-1 gradient-primary shadow-lg shadow-primary/20"
                     disabled={detectionState === 'analyzing'}
                   >
                     {detectionState === 'analyzing' ? (
@@ -309,64 +322,52 @@ export default function PestDetection() {
                       </>
                     ) : (
                       <>
-                        <ImageIcon className="mr-2 h-4 w-4" />
-                        Analyze with AI
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        AI Diagnose
                       </>
                     )}
                   </Button>
-                  <Button variant="outline" onClick={simulateDetection} disabled={detectionState === 'analyzing'}>
+                  <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={detectionState === 'analyzing'}>
                     <Camera className="h-4 w-4" />
                   </Button>
+                  <input type="file" ref={fileInputRef} className="hidden" accept="image/*" />
                 </div>
               </CardContent>
             </Card>
 
             {/* Result Card */}
-            <Card>
+            <Card className="flex flex-col min-h-[400px]">
               <CardHeader>
-                <CardTitle>Detection Result</CardTitle>
-                <CardDescription>AI analysis of the uploaded image</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                  <Bot className="h-5 w-5 text-primary" />
+                  AI Report
+                </CardTitle>
+                <CardDescription>Intelligent diagnostic output</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex-1">
                 {detectionState === 'analyzing' ? (
-                  <div className="flex flex-col items-center justify-center py-12">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4" />
-                    <p className="text-sm text-muted-foreground">Processing with OviGrow AI...</p>
+                  <div className="space-y-6 py-12 text-center">
+                    <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+                    <div className="space-y-2">
+                      <p className="font-medium text-lg">Analyzing symptoms...</p>
+                      <p className="text-sm text-muted-foreground">
+                        Identifying pest species and damage patterns
+                      </p>
+                    </div>
+                    <Progress value={progress} className="h-2 max-w-[200px] mx-auto" />
                   </div>
-                ) : detectedPest ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`rounded-full p-3 ${getSeverityBg(detectedPest.severity)}`}>
-                        <Bug className="h-6 w-6" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold">{detectedPest.name}</h3>
-                        <p className="text-xs text-muted-foreground italic">{detectedPest.scientificName}</p>
-                      </div>
-                      <Badge variant={getSeverityVariant(detectedPest.severity)}>
-                        {detectedPest.severity} severity
-                      </Badge>
-                    </div>
-                    <div className="rounded-lg bg-muted p-4 space-y-2">
-                      <p className="text-sm"><strong>Affected Crop:</strong> {detectedPest.crop}</p>
-                      <p className="text-sm">{detectedPest.description}</p>
-                    </div>
-                    <div className="rounded-lg border p-4 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Shield className="h-4 w-4 text-green-600" />
-                        <h4 className="font-semibold">Treatment Recommendation</h4>
-                      </div>
-                      <p className="text-sm text-muted-foreground">{detectedPest.treatment}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm">Apply Treatment Plan</Button>
-                      <Button variant="outline" size="sm">Share with Agronomist</Button>
-                    </div>
+                ) : aiReport ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {aiReport}
+                    </ReactMarkdown>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                    <Leaf className="h-12 w-12 mb-4" />
-                    <p className="text-sm">Upload an image to get AI pest analysis</p>
+                  <div className="flex flex-col items-center justify-center h-full py-12 text-muted-foreground text-center">
+                    <div className="rounded-full bg-muted p-6 mb-4">
+                      <Bug className="h-10 w-10 opacity-20" />
+                    </div>
+                    <p className="text-sm max-w-[200px]">Fill in the symptoms and click AI Diagnose to start analysis</p>
                   </div>
                 )}
               </CardContent>
@@ -505,3 +506,4 @@ export default function PestDetection() {
     </div>
   )
 }
+import { Bot } from 'lucide-react'
