@@ -40,14 +40,18 @@ const navItems = [
   { path: '/settings', label: 'Settings', icon: Settings },
 ]
 
-export function Sidebar() {
+export function Sidebar({ isMobile = false }) {
   const { sidebarOpen, toggleSidebar } = useStore()
+
+  const sidebarWidth = !isMobile
+    ? sidebarOpen ? 'w-64' : 'w-16'
+    : sidebarOpen ? 'w-64' : 'w-0'
 
   return (
     <aside
       className={cn(
         'fixed left-0 top-0 z-40 h-screen border-r bg-card transition-all duration-300',
-        sidebarOpen ? 'w-64' : 'w-16'
+        sidebarWidth
       )}
     >
       <div className="flex h-full flex-col">
